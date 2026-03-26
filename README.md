@@ -163,6 +163,3 @@ DOMAIN=saas docker run -p 7860:7860 multidomain-env
 ## License
 
 MIT
-```
-
-This version is clean, scannable, and ready to drop into GitHub, HuggingFace Spaces, or any Markdown-supported platform.

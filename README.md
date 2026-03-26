@@ -1,0 +1,314 @@
+---
+title: Multi-Domain LLM Evaluation Environment
+emoji: "🎫"
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+tags:
+  - openenv
+---
+
+# Multi-Domain LLM Evaluation Environment
+
+A domain-pluggable OpenEnv environment for evaluating LLM agents on
+real-world professional workflows. Switch the active domain with one
+environment variable - same container, same API, same baseline script.
+
+## Why This Exists
+
+Most LLM evaluation focuses on knowledge retrieval or reasoning puzzles.
+Real-world agents need to orchestrate tools, track multi-step state, and
+handle ambiguous situations - the skills SaaS support agents, HR assistants,
+and legal reviewers use every day. This environment fills that gap.
+
+## Quick Start
+
+```bash
+docker build -f server/Dockerfile -t multidomain-env .
+docker run -p 7860:7860 -e DOMAIN=saas multidomain-env
+```
+
+## Domains
+
+| Domain | Description | Tools | Tasks |
+|--------|-------------|-------|-------|
+| `saas` | SaaS customer support - triage, refund, escalate | 7 | 3 |
+| `hr` | HR policy and leave management | 7 | 3 |
+| `legal` | Contract review and risk flagging | 7 | 3 |
+
+Switch with: `DOMAIN=hr docker run ...`
+
+## Action Space
+
+All domains use the same action type:
+
+```json
+{
+  "tool_name": "search_tickets",
+  "tool_args": {"query": "billing", "customer_id": "C-1042"},
+  "thought": "Agent's reasoning - logged but not executed"
+}
+```
+
+## Observation Space
+
+```json
+{
+  "content": "Tool result text or initial task description",
+  "done": false,
+  "reward": 0.05,
+  "info": {
+    "step_count": 1,
+    "task_id": "saas_easy",
+    "trace_id": "uuid",
+    "grader_score": null
+  }
+}
+```
+
+`grader_score` is populated only on the terminal step (`done=true`).
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/reset` | POST | Start new episode |
+| `/step` | POST | Execute one action |
+| `/state` | GET | Current episode metadata |
+| `/tasks` | GET | List tasks + action schema |
+| `/baseline` | POST | Run baseline agent (`OPENAI_API_KEY` required) |
+| `/grader` | POST | Score a trajectory |
+| `/health` | GET | Health check |
+| `/metrics` | GET | Prometheus metrics |
+
+## Tasks
+
+### SaaS Domain
+
+| Task | Difficulty | Objective | Max Steps |
+|------|-----------|-----------|-----------|
+| `saas_easy` | Easy | Resolve billing ticket | 6 |
+| `saas_medium` | Medium | Double charge refund | 12 |
+| `saas_hard` | Hard | VIP multi-ticket triage | 20 |
+
+### HR Domain
+
+| Task | Difficulty | Objective | Max Steps |
+|------|-----------|-----------|-----------|
+| `hr_easy` | Easy | Leave entitlement query | 5 |
+| `hr_medium` | Medium | File leave request | 12 |
+| `hr_hard` | Hard | Payroll dispute resolution | 18 |
+
+### Legal Domain
+
+| Task | Difficulty | Objective | Max Steps |
+|------|-----------|-----------|-----------|
+| `legal_easy` | Easy | NDA termination clause review | 6 |
+| `legal_medium` | Medium | Vendor contract payment terms | 12 |
+| `legal_hard` | Hard | SaaS agreement multi-party review | 20 |
+
+## Baseline Scores (`gpt-4o-mini`, temperature=0)
+
+| Domain | Easy | Medium | Hard | Average |
+|--------|------|--------|------|---------|
+| `saas` | TODO | TODO | TODO | TODO |
+| `hr` | TODO | TODO | TODO | TODO |
+| `legal` | TODO | TODO | TODO | TODO |
+
+Run baseline: `OPENAI_API_KEY=sk-... DOMAIN=saas python baseline.py`
+
+## Local Small-Model Benchmarking with Ollama
+
+For local benchmarking and before-vs-after training comparisons, use the
+separate Ollama runner. This does not replace the competition baseline, but it
+is useful for showing how a smaller local model performs on the same SaaS tasks.
+
+Start the environment:
+
+```bash
+DOMAIN=saas DATABASE_URL=sqlite:///./ollama_saas.db ./../venv/bin/python -m uvicorn server.app:app --port 7860
+```
+
+Run one local model:
+
+```bash
+./../venv/bin/python benchmarks/run_saas_ollama.py \
+  --model codellama \
+  --base-url http://localhost:7860 \
+  --output-json benchmark_results/codellama_saas.json
+```
+
+Compare a base model and a trained variant:
+
+```bash
+./../venv/bin/python benchmarks/run_saas_ollama.py \
+  --model codellama \
+  --compare-model codellama-saas-ft \
+  --base-url http://localhost:7860 \
+  --output-json benchmark_results/codellama_compare.json
+```
+
+The Ollama runner reports:
+- per-task grader score
+- average score
+- success rate
+- average turns
+- invalid action rate
+
+Current local SaaS baseline (`qwen2.5:1.5b`, 10 repeated runs):
+
+| Model | Runs | Easy | Medium | Hard | Mean Avg Score | Mean Success Rate | Mean Avg Turns | Mean Invalid Action Rate |
+|------|------|------|--------|------|----------------|-------------------|----------------|--------------------------|
+| `qwen2.5:1.5b` | 10 | 0.4250 | 0.4000 | 0.5000 | 0.4417 | 0.0000 | 12.6667 | 0.8158 |
+
+This baseline is intentionally weak but informative: the model often starts the
+correct support workflow, but still loops heavily and accumulates invalid tool
+calls, which makes it a useful "before training" checkpoint for the SaaS domain.
+
+For more credible benchmark evidence, run repeated evaluations and save all
+artifacts:
+
+```bash
+./../venv/bin/python benchmarks/run_saas_ollama.py \
+  --model codellama \
+  --compare-model codellama-saas-ft \
+  --base-url http://localhost:7860 \
+  --repeats 10 \
+  --output-dir benchmark_results/codellama_vs_ft \
+  --output-json benchmark_results/codellama_vs_ft_summary.json
+```
+
+This writes:
+- one JSON file per run for the primary model
+- one JSON file per run for the comparison model
+- a `summary.json` aggregate file with mean metrics and deltas
+
+Suggested reporting metrics:
+- mean average score
+- mean success rate
+- mean average turns
+- mean invalid action rate
+- task-level score means for `saas_easy`, `saas_medium`, and `saas_hard`
+
+## SaaS SFT Training Workflow
+
+The repo also includes a first-pass supervised fine-tuning workflow for the
+SaaS domain. It generates deterministic expert traces, validates the dataset,
+trains a lightweight LoRA adapter for Qwen, and exports a new Ollama model name
+for re-benchmarking.
+
+Install training dependencies:
+
+```bash
+pip install -e .[train]
+```
+
+Generate a deterministic SaaS training dataset:
+
+```bash
+./../venv/bin/python benchmarks/generate_saas_sft_dataset.py \
+  --base-url http://localhost:7860 \
+  --repeats 10 \
+  --output-dir artifacts/datasets/saas_sft
+```
+
+Validate the generated dataset:
+
+```bash
+./../venv/bin/python benchmarks/validate_saas_sft_dataset.py \
+  artifacts/datasets/saas_sft/train.jsonl
+```
+
+Train a Qwen SaaS SFT adapter:
+
+```bash
+./../venv/bin/python benchmarks/train_qwen_saas_sft.py \
+  --dataset-path artifacts/datasets/saas_sft/train.jsonl \
+  --base-model Qwen/Qwen2.5-1.5B-Instruct \
+  --output-dir artifacts/checkpoints/qwen25_saas_sft
+```
+
+Or run the whole workflow end to end:
+
+```bash
+bash scripts/train_saas_sft.sh
+```
+
+This produces a local Ollama model named `qwen2.5-saas-sft` by default. Then
+benchmark before and after using the same SaaS runner:
+
+```bash
+./../venv/bin/python benchmarks/run_saas_ollama.py \
+  --model qwen2.5:1.5b \
+  --compare-model qwen2.5-saas-sft \
+  --base-url http://localhost:7860 \
+  --repeats 10 \
+  --output-dir benchmark_results/qwen25_before_after \
+  --output-json benchmark_results/qwen25_before_after_summary.json
+```
+
+To commit small proof summaries only, compare two aggregate benchmark outputs
+and save the compact delta file:
+
+```bash
+./../venv/bin/python benchmarks/compare_benchmark_summaries.py \
+  --baseline benchmark_results/qwen25_1p5b_runs10_summary.json \
+  --candidate benchmark_results/qwen25_before_after_summary.json \
+  --output-json docs/qwen25_saas_comparison_summary.json
+```
+
+Because Ollama does not currently support importing Qwen LoRA adapters, use the
+direct `transformers` benchmark path for Qwen before/after comparison:
+
+```bash
+./../venv/bin/python benchmarks/run_saas_transformers.py \
+  --model Qwen/Qwen2.5-1.5B-Instruct \
+  --compare-model Qwen/Qwen2.5-1.5B-Instruct \
+  --compare-adapter-path artifacts/checkpoints/qwen25_saas_sft_smoke \
+  --base-url http://localhost:7860 \
+  --repeats 10 \
+  --output-dir benchmark_results/qwen25_hf_before_after \
+  --output-json benchmark_results/qwen25_hf_before_after_summary.json
+```
+
+This compares:
+- base HF model: `Qwen/Qwen2.5-1.5B-Instruct`
+- trained HF model: the same base model with the local adapter at `artifacts/checkpoints/qwen25_saas_sft_smoke`
+
+Then summarize deltas with the same comparison helper:
+
+```bash
+./../venv/bin/python benchmarks/compare_benchmark_summaries.py \
+  --baseline benchmark_results/qwen25_1p5b_runs10_summary.json \
+  --candidate benchmark_results/qwen25_hf_before_after_summary.json \
+  --output-json docs/qwen25_hf_saas_comparison_summary.json
+```
+
+Current SFT smoke-training status:
+
+| Base Model | Dataset Rows | Epochs | Learning Rate | Status |
+|-----------|--------------|--------|---------------|--------|
+| `Qwen/Qwen2.5-1.5B-Instruct` | 140 | 1 | 0.0002 | Smoke checkpoint completed locally |
+
+Current local verification snapshot:
+- `75 passed` unit tests
+- `28 passed` integration tests
+- deterministic SaaS SFT dataset generated and validated
+- local LoRA smoke checkpoint written under `artifacts/checkpoints/qwen25_saas_sft_smoke/`
+
+## Adding a New Domain
+
+```bash
+bash scripts/new_domain.sh finance
+# Fill in the 6 stub files - zero engine changes needed
+```
+
+## Setup
+
+```bash
+pip install openenv-core
+DOMAIN=saas openenv validate --verbose
+docker build -f server/Dockerfile -t multidomain-env .
+DOMAIN=saas docker run -p 7860:7860 multidomain-env
+```

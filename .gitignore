@@ -1,0 +1,26 @@
+# Python cache and metadata
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Environment files
+*.env
+venv/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+\#*#
+
+# Logs
+*.log
+
+# macOS
+.DS_Store
+
+# Generated benchmark and training artifacts
+benchmark_results/
+artifacts/
+*.db
+*.db-journal

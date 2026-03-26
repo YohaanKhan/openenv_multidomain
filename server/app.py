@@ -6,6 +6,8 @@ except ImportError:
 import os
 from typing import Any
 
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
 from fastapi import Response
 from fastapi.responses import JSONResponse
 
@@ -60,6 +62,8 @@ def _create_app() -> Any:
 
 
 app = _create_app()
+# Trust HF's reverse proxy so redirects use https:// instead of http://
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 
 @app.get("/tasks")

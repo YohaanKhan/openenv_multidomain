@@ -12,16 +12,11 @@ tags:
 
 # Multi-Domain LLM Evaluation Environment
 
-A domain-pluggable OpenEnv environment for evaluating LLM agents on
-real-world professional workflows. Switch the active domain with one
-environment variable - same container, same API, same baseline script.
+A domain-pluggable OpenEnv environment for evaluating LLM agents on real-world professional workflows. Switch the active domain with one environment variable - same container, same API, same baseline script.
 
 ## Why This Exists
 
-Most LLM evaluation focuses on knowledge retrieval or reasoning puzzles.
-Real-world agents need to orchestrate tools, track multi-step state, and
-handle ambiguous situations - the skills SaaS support agents, HR assistants,
-and legal reviewers use every day. This environment fills that gap.
+Most LLM evaluation focuses on knowledge retrieval or reasoning puzzles. Real-world agents need to orchestrate tools, track multi-step state, and handle ambiguous situations - the skills SaaS support agents, HR assistants, and legal reviewers use every day. This environment fills that gap.
 
 ## Quick Start
 
@@ -128,9 +123,7 @@ python baseline.py
 
 ## Local Small-Model Benchmarking with Ollama
 
-For local benchmarking and before-vs-after training comparisons, use the
-separate Ollama runner. This does not replace the competition baseline, but it
-is useful for showing how a smaller local model performs on the same SaaS tasks.
+For local benchmarking and before-vs-after training comparisons, use the separate Ollama runner. This does not replace the competition baseline, but it is useful for showing how a smaller local model performs on the same SaaS tasks.
 
 Start the environment:
 
@@ -170,12 +163,9 @@ Current local SaaS baseline (`qwen2.5:1.5b`, 10 repeated runs):
 |------|------|------|--------|------|----------------|-------------------|----------------|--------------------------|
 | `qwen2.5:1.5b` | 10 | 0.4250 | 0.4000 | 0.5000 | 0.4417 | 0.0000 | 12.6667 | 0.8158 |
 
-This baseline is intentionally weak but informative: the model often starts the
-correct support workflow, but still loops heavily and accumulates invalid tool
-calls, which makes it a useful "before training" checkpoint for the SaaS domain.
+This baseline is intentionally weak but informative: the model often starts the correct support workflow, but still loops heavily and accumulates invalid tool calls, which makes it a useful "before training" checkpoint for the SaaS domain.
 
-For more credible benchmark evidence, run repeated evaluations and save all
-artifacts:
+For more credible benchmark evidence, run repeated evaluations and save all artifacts:
 
 ```bash
 ./../venv/bin/python benchmarks/run_saas_ollama.py \

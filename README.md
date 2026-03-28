@@ -35,6 +35,12 @@ For Hugging Face Spaces, the Docker image now follows the current Docker Spaces 
 
 That avoids the startup/build-loop pattern where the Space boots successfully, then restarts because the default SQLite file is not writable at runtime.
 
+When deploying with `openenv push`, use the repository's `.hfignore` so local checkpoints, SQLite files, and benchmark artifacts are not uploaded to the Space:
+
+```bash
+openenv push . --repo-id Yokohamas/openenv_multidomain --exclude .hfignore
+```
+
 ## Domains
 
 | Domain | Description | Tools | Tasks |

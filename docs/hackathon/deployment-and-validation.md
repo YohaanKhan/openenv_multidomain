@@ -30,6 +30,7 @@ The Docker setup is aligned to Hugging Face Spaces requirements:
 - health checks target `7860`
 - runtime uses a writable SQLite path (`/tmp/env.db`) by default inside the container
 - image files are owned by the non-root Spaces user (`uid 1000`)
+- Space uploads should exclude local artifacts via `.hfignore`
 - Docker build has been verified locally
 - container smoke tests cover the expected endpoints
 

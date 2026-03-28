@@ -1,0 +1,30 @@
+# Local databases and runtime state
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Python environments and caches
+venv/
+.venv/
+__pycache__/
+.pytest_cache/
+
+# Local benchmark/training outputs
+benchmark_results/
+artifacts/
+outputs/
+
+# Fine-tuning checkpoints and model blobs
+**/checkpoint-*/
+**/*.safetensors
+**/*.pth
+**/*.pt
+**/tokenizer.json
+**/training_args.bin
+
+# Local scripts and editor noise that do not belong in the Space runtime
+scripts/
+.vscode/
+.idea/
+.DS_Store

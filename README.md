@@ -1,6 +1,6 @@
 ---
-title: Multi-Domain LLM Evaluation Environment
-emoji: "🎫"
+title: Multi-Domain OpenEnv
+emoji: 🎫
 colorFrom: blue
 colorTo: indigo
 sdk: docker

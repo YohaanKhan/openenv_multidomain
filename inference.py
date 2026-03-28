@@ -206,7 +206,8 @@ def run_all_tasks(domain_name: str) -> dict[str, float]:
 
     scores: dict[str, float] = {}
 
-    with MultiDomainEnv(base_url=HF_SPACE_URL) as env:
+    env = MultiDomainEnv(base_url=HF_SPACE_URL).sync()
+    try:
         for task in tasks:
             print(f"\n{'='*60}")
             print(f"Domain: {domain_name} | Task: {task['id']} ({task.get('difficulty','?')})")
@@ -214,6 +215,8 @@ def run_all_tasks(domain_name: str) -> dict[str, float]:
             score = run_episode(env, client, task, domain_name)
             scores[task["id"]] = round(score, 4)
             print(f"  => Final grader score: {scores[task['id']]:.4f}")
+    finally:
+        env.close()
 
     return scores
 

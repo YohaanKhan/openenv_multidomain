@@ -1,4 +1,6 @@
-FROM python:3.11-slim AS builder
+ARG BASE_IMAGE=ghcr.io/meta-pytorch/openenv-base:latest
+FROM ${BASE_IMAGE} AS builder
+USER root
 WORKDIR /app
 
 RUN apt-get update && \
@@ -31,12 +33,16 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         uv sync --no-editable; \
     fi
 
-FROM python:3.11-slim
+ARG BASE_IMAGE=ghcr.io/meta-pytorch/openenv-base:latest
+FROM ${BASE_IMAGE}
+USER root
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*
 
-RUN useradd -m -u 1000 user
+RUN if ! id -u user >/dev/null 2>&1; then \
+        useradd -m -u 1000 user; \
+    fi
 
 USER user
 

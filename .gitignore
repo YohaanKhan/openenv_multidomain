@@ -24,3 +24,11 @@ benchmark_results/
 artifacts/
 *.db
 *.db-journal
+# Training artifacts - don't upload to HF Space
+scripts/
+benchmark_results/
+**/checkpoint-*/
+**/*.safetensors
+**/*.pth
+**/*.pt
+ollama_saas.db

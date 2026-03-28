@@ -54,8 +54,15 @@ class MultiDomainEnvironment(Environment):
         self._episode_start_time: float | None = None
         self._task_counter = 0
 
-    def reset(self) -> EnvObservation:
-        """Reset the environment, seed the next task, and start a new savepoint."""
+    def reset(self, task_id: str | None = None) -> EnvObservation:
+        """Reset the environment, seed the next task, and start a new savepoint.
+        
+        Args:
+            task_id: Optional task ID to reset to. If not provided, rotates through tasks.
+                    
+        Raises:
+            ValueError: If task_id is provided but not found in available tasks.
+        """
         self._tx.rollback_episode()
         episode_id = str(uuid4())
         self._state = State(episode_id=episode_id, step_count=0)
@@ -69,9 +76,19 @@ class MultiDomainEnvironment(Environment):
         if not self._tasks:
             raise RuntimeError("No tasks registered for the domain.")
 
-        task_idx = self._task_counter % len(self._tasks)
-        self._task = self._tasks[task_idx]
-        self._task_counter += 1
+        # Select task based on task_id if provided, otherwise rotate
+        if task_id is not None:
+            matched = next((t for t in self._tasks if t["id"] == task_id), None)
+            if matched is None:
+                available_ids = [t["id"] for t in self._tasks]
+                raise ValueError(
+                    f"Unknown task_id '{task_id}'. Available: {available_ids}"
+                )
+            self._task = matched
+        else:
+            task_idx = self._task_counter % len(self._tasks)
+            self._task = self._tasks[task_idx]
+            self._task_counter += 1
 
         seed_payload = self._domain.seed_episode(self._task["id"], session)
         task_description = seed_payload.get("description", self._task.get("description", ""))

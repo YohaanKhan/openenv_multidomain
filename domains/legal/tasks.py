@@ -31,15 +31,19 @@ TASKS = [
     },
     {
         "id": "legal_hard",
-        "name": "SaaS Agreement Multi-Party Review",
+        "name": "SaaS Agreement Multi-Party Review with Conflicting Liability Caps",
         "difficulty": "hard",
         "max_steps": 20,
         "description": (
-            "Review SaaS agreement SA-001 (3 parties). "
-            "Extract all clauses, identify the two non-standard clauses "
-            "(indemnity and liability), compare each against standard terms, "
-            "flag both with correct risk levels (indemnity=high, liability=medium), "
-            "add memo notes for each finding, then finalize."
+            "Review SaaS agreement SA-001 (3 parties with conflicting data). "
+            "WARNING: Main contract (Section 4.2) specifies LIABILITY CAP A. "
+            "Schedule A (Addendum) specifies LIABILITY CAP B (different amount). "
+            "Schedule B (Data DPA) specifies LIABILITY CAP C (unlimited for data breaches). "
+            "NO explicit conflict resolution clause exists. "
+            "You must: (1) Extract all three liability clauses; (2) Compare each against standards; "
+            "(3) Flag the CONFLICT with HIGH risk; (4) Add memo explaining the issue; "
+            "(5) Recommend specific precedence language; (6) Finalize memo. "
+            "Missing the conflict = major deduction."
         ),
     },
 ]
@@ -91,12 +95,48 @@ def seed(task_id: str, session: Session) -> dict[str, str]:
         session.merge(
             schema.Contract(
                 id="SA-001",
-                title="SaaS Multi-Tenant Agreement",
+                title="SaaS Multi-Tenant Agreement (3-Party with Conflicting Schedules)",
                 contract_type="saas_agreement",
                 parties="Provider Corp, Customer A, Customer B",
             )
         )
         clauses = [
+            # Main contract - Section 4.2
+            schema.Clause(
+                id="SA-001-LIABILITY-MAIN",
+                contract_id="SA-001",
+                clause_type="liability",
+                party="all",
+                content="[SECTION 4.2] Liability cap is 3x annual fees paid in the 12 months preceding the claim. Applies to all claims.",
+                is_standard=False,
+            ),
+            # Schedule A (Addendum) - different cap
+            schema.Clause(
+                id="SA-001-LIABILITY-SCHED-A",
+                contract_id="SA-001",
+                clause_type="liability",
+                party="all",
+                content="[SCHEDULE A - Addendum, signed 2026-02-15] Liability cap is $50,000 flat for all claims. Overrides prior understanding.",
+                is_standard=False,
+            ),
+            # Schedule B (Data Processing Addendum) - unlimited for data breaches
+            schema.Clause(
+                id="SA-001-LIABILITY-SCHED-B",
+                contract_id="SA-001",
+                clause_type="liability",
+                party="all",
+                content="[SCHEDULE B - Data Processing Addendum (GDPR), signed 2026-03-01] Liability is UNLIMITED for data breaches and personal data violations. Regular operations capped at 3x fees.",
+                is_standard=False,
+            ),
+            # NO conflict resolution clause
+            schema.Clause(
+                id="SA-001-NO-PRECEDENCE",
+                contract_id="SA-001",
+                clause_type="precedence",
+                party="all",
+                content="[MISSING CLAUSE] This agreement does not specify which schedule or section takes precedence in case of conflict.",
+                is_standard=False,
+            ),
             schema.Clause(
                 id="SA-001-CONF",
                 contract_id="SA-001",
@@ -106,27 +146,11 @@ def seed(task_id: str, session: Session) -> dict[str, str]:
                 is_standard=True,
             ),
             schema.Clause(
-                id="SA-001-OBL",
-                contract_id="SA-001",
-                clause_type="obligations",
-                party="provider",
-                content="Provider agrees to maintain 99.99% uptime.",
-                is_standard=True,
-            ),
-            schema.Clause(
                 id="SA-001-INDEMNITY",
                 contract_id="SA-001",
                 clause_type="indemnity",
                 party="customer",
-                content="Indemnity capped at 1x annual contract value.",
-                is_standard=False,
-            ),
-            schema.Clause(
-                id="SA-001-LIABILITY",
-                contract_id="SA-001",
-                clause_type="liability",
-                party="all",
-                content="Liability exclusion applies to indirect damages only.",
+                content="Indemnity capped at 2x annual contract value.",
                 is_standard=False,
             ),
         ]
@@ -134,28 +158,16 @@ def seed(task_id: str, session: Session) -> dict[str, str]:
             session.merge(clause)
         standard_terms = [
             schema.StandardTerm(
-                id="STD-TERM",
-                clause_type="termination",
-                content="Standard termination clause.",
-                notes="Ensure notice periods are documented.",
+                id="STD-LIABILITY",
+                clause_type="liability",
+                content="Standard: Liability cap is 1x annual fees OR explicit dollar amount. Data breach liability should align with GDPR.",
+                notes="Conflicting liability caps across schedules create enforceability risk.",
             ),
             schema.StandardTerm(
                 id="STD-INDEMNITY",
                 clause_type="indemnity",
                 content="Indemnity capped at 2x annual contract value.",
                 notes="Higher caps protect the provider.",
-            ),
-            schema.StandardTerm(
-                id="STD-LIABILITY",
-                clause_type="liability",
-                content="Liability exclusion applies to all consequential and indirect damages.",
-                notes="Ensure liability caps are explicit.",
-            ),
-            schema.StandardTerm(
-                id="STD-PAY",
-                clause_type="payment",
-                content="Payment due within 30 days of invoice.",
-                notes="Shorter payment windows reduce working capital risk.",
             ),
         ]
         for term in standard_terms:

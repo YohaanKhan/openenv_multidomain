@@ -29,15 +29,17 @@ TASKS = [
     },
     {
         "id": "hr_hard",
-        "name": "Payroll Deduction Dispute",
+        "name": "Payroll Deduction Dispute with Conflicting Policies",
         "difficulty": "hard",
         "max_steps": 18,
         "description": (
-            "Employee E-303 (Chen Wei) disputes an unexpected deduction from their salary. "
-            "Look up the payroll deduction policy, retrieve their employee record, "
-            "check their benefits to identify the deduction source, "
-            "file a dispute request, then send a notification to E-303 "
-            "that includes the request reference number. Finally close the dispute."
+            "Employee E-303 (Chen Wei) disputes an unexpected payroll deduction. "
+            "CRITICAL: The company handbook (OLD policy) and the recent amendment (NEW policy) "
+            "conflict on pension deduction rates. You must identify BOTH policies, determine which "
+            "is currently active, then correctly explain the deduction to the employee. "
+            "Retrieve: (1) employee record; (2) BOTH payroll policies; (3) employee benefits; "
+            "file a dispute with correct policy reference; send notification with reference number; "
+            "close the dispute. Wrong policy reference = partial credit."
         ),
     },
 ]
@@ -78,12 +80,22 @@ def seed(task_id: str, session: Session) -> dict[str, str]:
                 leave_used=5,
             )
         )
+        # OLD policy (company handbook, effective until 2026-02-28)
         session.merge(
             schema.Policy(
-                id="POL-HR-002",
+                id="POL-HR-002-OLD",
                 topic="payroll",
-                title="Payroll Deduction Policy",
-                content="Payroll deductions cover taxes and benefit contributions per company policy.",
+                title="Payroll Deduction Policy (Legacy - expires 2026-02-28)",
+                content="Mandatory pension contribution is 10% of gross salary. Deducted monthly.",
+            )
+        )
+        # NEW policy (effective 2026-03-01, CURRENT)
+        session.merge(
+            schema.Policy(
+                id="POL-HR-002-NEW",
+                topic="payroll",
+                title="Payroll Deduction Policy (Current - effective 2026-03-01)",
+                content="Mandatory pension contribution is 12% of gross salary effective March 2026 (increased from 10%). Deducted monthly.",
             )
         )
         session.merge(
@@ -91,8 +103,8 @@ def seed(task_id: str, session: Session) -> dict[str, str]:
                 id="BEN-303-001",
                 employee_id="E-303",
                 benefit_type="pension",
-                value=150.0,
-                description="Mandatory pension contribution — deducted monthly",
+                value=180.0,
+                description="Mandatory pension contribution — deducted monthly at 12% rate (NEW policy effective 2026-03-01)",
             )
         )
     else:

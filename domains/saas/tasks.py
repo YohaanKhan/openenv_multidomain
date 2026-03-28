@@ -35,16 +35,17 @@ TASKS = [
     },
     {
         "id": "saas_hard",
-        "name": "VIP Multi-Ticket Triage",
+        "name": "VIP Multi-Ticket Triage with Conflicting Data",
         "difficulty": "hard",
         "max_steps": 20,
         "description": (
-            "VIP enterprise customer C-9001 (Alice Corp) has multiple active issues. "
-            "There is one urgent fraud-related billing concern that must be escalated, "
-            "one duplicate charge that should be refunded, and one open billing ticket "
-            "that can be closed after resolution. Review the account carefully, refund "
-            "the correct duplicate transaction, escalate the urgent fraud ticket to Tier 2, "
-            "close the resolved billing ticket, and send a customer update email."
+            "VIP enterprise customer C-9001 (Alice Corp) has multiple active issues with "
+            "conflicting billing records. WARNING: The internal billing system and the payment "
+            "processor show DIFFERENT charge counts for March. There are two identical ticket reports "
+            "about the same duplicate charge (risk of double-refunding). "
+            "You must: (1) Identify duplicate tickets; (2) Check both billing and payment processor; "
+            "(3) Issue exactly ONE refund, not two; (4) Escalate the fraud concern; (5) Close all related tickets. "
+            "VIP SLA: resolve in ≤15 steps or face penalty."
         ),
     },
 ]
@@ -454,10 +455,10 @@ def seed(task_id: str, session: Session) -> dict[str, str]:
                 {
                     "id": "T-8001",
                     "customer_id": "C-9001",
-                    "title": "Suspicious duplicate billing activity",
+                    "title": "Suspicious duplicate billing activity - FRAUD REVIEW NEEDED",
                     "body": (
                         "We noticed an unexpected second enterprise billing event and want "
-                        "fraud review before month-end close."
+                        "fraud review before month-end close. This is urgent for our compliance."
                     ),
                     "status": "open",
                     "priority": "urgent",
@@ -469,10 +470,10 @@ def seed(task_id: str, session: Session) -> dict[str, str]:
                 {
                     "id": "T-8002",
                     "customer_id": "C-9001",
-                    "title": "Duplicate March subscription charge",
+                    "title": "Duplicate March subscription charge - REQUEST REFUND",
                     "body": (
-                        "Our AP team sees two $499 March subscription charges and needs the "
-                        "duplicate reversed."
+                        "Our AP team sees two $499 March subscription charges (TX-9801 and TX-9802) "
+                        "and needs the duplicate reversed. Both show same date 2026-03-01."
                     ),
                     "status": "open",
                     "priority": "high",
@@ -484,8 +485,23 @@ def seed(task_id: str, session: Session) -> dict[str, str]:
                 {
                     "id": "T-8003",
                     "customer_id": "C-9001",
+                    "title": "DUPLICATE: Charged twice for March - PLEASE REFUND",
+                    "body": (
+                        "We see duplicate March charges. Please issue a refund for one of them. "
+                        "Reference: TX-9802. This is affecting our reconciliation."
+                    ),
+                    "status": "open",
+                    "priority": "high",
+                    "category": "billing",
+                    "tier": 1,
+                    "created_at": "2026-03-03T08:30:00Z",
+                    "updated_at": "2026-03-03T08:30:00Z",
+                },
+                {
+                    "id": "T-8004",
+                    "customer_id": "C-9001",
                     "title": "Sandbox seat invoice clarification",
-                    "body": "Please confirm whether the sandbox seat add-on is expected.",
+                    "body": "Please confirm whether the sandbox seat add-on is expected and correct.",
                     "status": "pending",
                     "priority": "normal",
                     "category": "billing",
@@ -504,18 +520,6 @@ def seed(task_id: str, session: Session) -> dict[str, str]:
                     "tier": 1,
                     "created_at": "2026-03-03T09:10:00Z",
                     "updated_at": "2026-03-03T09:10:00Z",
-                },
-                {
-                    "id": "T-8020",
-                    "customer_id": "C-9010",
-                    "title": "Escalation request for procurement review",
-                    "body": "Please route our contract amendment request to procurement.",
-                    "status": "open",
-                    "priority": "normal",
-                    "category": "general",
-                    "tier": 1,
-                    "created_at": "2026-03-01T12:30:00Z",
-                    "updated_at": "2026-03-01T12:30:00Z",
                 },
             ],
         )

@@ -4,12 +4,13 @@ except ImportError:
     import domains  # noqa: F401
 
 import os
-from typing import Any
+from typing import Any, Optional
 
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from fastapi import Response
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 try:
     from openenv.core.env_server.http_server import create_app
@@ -30,6 +31,13 @@ except ImportError:
     from server.domain_registry import DomainRegistry
     from server.utils.db import engine
     from server.utils.metrics import get_metrics_response
+
+
+# Request schema for reset endpoint
+class ResetRequest(BaseModel):
+    """Reset request body that can include an optional task_id."""
+
+    task_id: Optional[str] = None
 
 domain_name = os.getenv("DOMAIN", "saas")
 

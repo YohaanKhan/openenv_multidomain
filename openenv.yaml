@@ -1,6 +1,161 @@
 spec_version: 1
 name: openenv_multidomain
+description: >
+  Plug-and-play LLM agent evaluation environment across professional domains.
+  Supports SaaS customer support, HR policy management, and legal contract review.
+  Switch domains via the DOMAIN environment variable — same container, same API.
 type: space
 runtime: fastapi
 app: server.app:app
 port: 7860
+
+observation_space:
+  type: object
+  properties:
+    content:
+      type: string
+      description: Text returned by the environment after each action
+    done:
+      type: boolean
+      description: Whether the episode has ended
+    reward:
+      type: number
+      description: Immediate reward for the last action
+    info:
+      type: object
+      properties:
+        task_id:
+          type: string
+          description: Unique identifier for the current task
+        step_count:
+          type: integer
+          description: Number of steps taken in this episode
+        trace_id:
+          type: string
+          description: Unique trace ID for auditing and debugging
+        domain:
+          type: string
+          description: Current domain (saas, hr, or legal)
+        grader_score:
+          type: number
+          nullable: true
+          description: Final grader score (0.0–1.0), only set on terminal step
+        task_difficulty:
+          type: string
+          description: Difficulty level of current task (easy, medium, hard)
+        step_limit_hit:
+          type: boolean
+          description: True if episode terminated due to step limit
+        error:
+          type: string
+          nullable: true
+          description: Error message if last action failed
+
+action_space:
+  type: object
+  required: [tool_name, tool_args]
+  properties:
+    tool_name:
+      type: string
+      description: Name of the tool to call (must match available tools for domain)
+    tool_args:
+      type: object
+      description: Arguments for the tool, validated against tool schema
+    thought:
+      type: string
+      description: Agent's reasoning (logged but not executed)
+
+tasks:
+  - id: saas_easy
+    domain: saas
+    difficulty: easy
+    max_steps: 6
+    name: Billing Ticket Resolution
+    objective: Resolve a billing ticket for a standard customer
+  - id: saas_medium
+    domain: saas
+    difficulty: medium
+    max_steps: 12
+    name: Double Charge Refund
+    objective: Process a double-charge refund with identity verification
+  - id: saas_hard
+    domain: saas
+    difficulty: hard
+    max_steps: 20
+    name: VIP Multi-Ticket Triage with Conflicting Data
+    objective: Resolve a VIP multi-ticket dispute with conflicting billing records
+
+  - id: hr_easy
+    domain: hr
+    difficulty: easy
+    max_steps: 5
+    name: Leave Entitlement Query
+    objective: Answer an employee leave entitlement query
+  - id: hr_medium
+    domain: hr
+    difficulty: medium
+    max_steps: 12
+    name: Leave Request Filing
+    objective: File a leave request with manager approval routing
+  - id: hr_hard
+    domain: hr
+    difficulty: hard
+    max_steps: 18
+    name: Payroll Deduction Dispute with Conflicting Policies
+    objective: Resolve a payroll dispute involving conflicting policy amendments
+
+  - id: legal_easy
+    domain: legal
+    difficulty: easy
+    max_steps: 6
+    name: NDA Termination Clause Review
+    objective: Identify termination clauses in an NDA
+  - id: legal_medium
+    domain: legal
+    difficulty: medium
+    max_steps: 12
+    name: Vendor Contract Payment Terms
+    objective: Flag non-standard payment terms in a vendor contract
+  - id: legal_hard
+    domain: legal
+    difficulty: hard
+    max_steps: 20
+    name: SaaS Agreement Multi-Party Review with Conflicting Liability Caps
+    objective: Identify conflicting liability caps across a multi-party SaaS agreement
+
+reward:
+  range: [-0.1, 1.0]
+  shaping: true
+  description: >
+    Per-step rewards for correct tool use and progress milestones.
+    Penalties for invalid tool calls (-0.05 to -0.10) and repeated identical calls.
+    Terminal reward equals grader score (0.0–1.0), clamped to [0.0, 1.0].
+
+grading:
+  type: rubric_and_llm
+  description: >
+    Each domain uses deterministic code graders and LLM graders.
+    Scores are deterministic at temperature=0 and always in range [0.0, 1.0].
+  domains:
+    saas:
+      code_criteria:
+        - Correct ticket identification (20%)
+        - Proper refund logic (20%)
+        - Duplicate detection (20%)
+        - Ticket closure (20%)
+        - Customer communication (20%)
+    hr:
+      code_criteria:
+        - Policy lookup completeness (20%)
+        - Leave balance verification (20%)
+        - Request filing accuracy (20%)
+        - Notification delivery (20%)
+        - Closure documentation (20%)
+    legal:
+      code_criteria:
+        - Clause extraction completeness (20%)
+        - Risk assessment accuracy (20%)
+        - Conflict detection (20%)
+        - Memo documentation (20%)
+        - Recommendation quality (20%)
+

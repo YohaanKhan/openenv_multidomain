@@ -41,7 +41,7 @@ class LegalCodeGrader(BaseGrader):
         if "finalize_memo" in names:
             score += 0.4
         return {
-            "score": score,
+            "score": min(1.0, max(0.0, round(score, 4))),
             "success": "finalize_memo" in names,
             "feedback": "Easy legal grader",
         }
@@ -64,7 +64,11 @@ class LegalCodeGrader(BaseGrader):
             )
             if clause and clause.risk_level != "none" and "flag_risk" in names:
                 score = min(1.0, score + 0.05)
-        return {"score": score, "success": success, "feedback": "Medium legal grader"}
+        return {
+            "score": min(1.0, max(0.0, round(score, 4))),
+            "success": success,
+            "feedback": "Medium legal grader",
+        }
 
     def _grade_hard(self, trajectory: list[dict[str, Any]], session: Any) -> dict[str, Any]:
         names = [step["tool_name"] for step in trajectory]
@@ -97,7 +101,11 @@ class LegalCodeGrader(BaseGrader):
                 success = False
             else:
                 success = success and indemnity.risk_level == "high" and liability.risk_level == "medium"
-        return {"score": score, "success": success, "feedback": "Hard legal grader"}
+        return {
+            "score": min(1.0, max(0.0, round(score, 4))),
+            "success": success,
+            "feedback": "Hard legal grader",
+        }
 
     def _flagged_with_level(self, trajectory: list[dict[str, Any]], level: str) -> bool:
         for step in trajectory:

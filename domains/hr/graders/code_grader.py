@@ -38,7 +38,7 @@ class HRCodeGrader(BaseGrader):
         if "close_hr_request" in tools:
             score += 0.6
         return {
-            "score": score,
+            "score": min(1.0, max(0.0, round(score, 4))),
             "success": "close_hr_request" in tools,
             "feedback": "Easy task grader",
         }
@@ -53,7 +53,11 @@ class HRCodeGrader(BaseGrader):
         tools = {step["tool_name"] for step in trajectory}
         score = sum(weight for name, weight in checklist if name in tools)
         success = {"file_leave_request", "close_hr_request"}.issubset(tools)
-        return {"score": score, "success": success, "feedback": "Medium task grader"}
+        return {
+            "score": min(1.0, max(0.0, round(score, 4))),
+            "success": success,
+            "feedback": "Medium task grader",
+        }
 
     def _grade_hard(self, trajectory: list[dict[str, Any]]) -> dict[str, Any]:
         tools = [step["tool_name"] for step in trajectory]
@@ -78,7 +82,11 @@ class HRCodeGrader(BaseGrader):
         if close_matches:
             score += 0.30
         success = close_matches and "file_leave_request" in tools
-        return {"score": score, "success": success, "feedback": "Hard task grader"}
+        return {
+            "score": min(1.0, max(0.0, round(score, 4))),
+            "success": success,
+            "feedback": "Hard task grader",
+        }
 
     def _extract_leave_ref(self, trajectory: list[dict[str, Any]]) -> str | None:
         for step in trajectory:

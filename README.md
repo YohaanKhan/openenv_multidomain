@@ -106,22 +106,47 @@ All domains use the same action type:
 | `legal_medium` | Medium | Vendor contract payment terms | 12 |
 | `legal_hard` | Hard | SaaS agreement multi-party review | 20 |
 
-## Baseline Scores (`gpt-4o-mini`, temperature=0)
+## Baseline Scores (`gpt-4o-mini`, temperature=0, `response_format="json_object"`)
 
-| Domain | Easy | Medium | Hard | Average |
-|--------|------|--------|------|---------|
-| `saas` | TODO | TODO | TODO | TODO |
-| `hr` | TODO | TODO | TODO | TODO |
-| `legal` | TODO | TODO | TODO | TODO |
+Baseline scores are **deterministic** at temperature=0. All graders return scores in the range [0.0, 1.0].
 
-Run baseline against the live Space:
+### Competition Baseline (`inference.py`)
+
+Required environment variables:
+- `OPENAI_API_KEY` – Your OpenAI API key (or compatible provider key)
+- `API_BASE_URL` – LLM endpoint (default: `https://api.openai.com/v1`)
+- `MODEL_NAME` – Model identifier (default: `gpt-4o-mini`)
+- `HF_SPACE_URL` – Deployed Space URL (default: `http://localhost:7860`)
+- `DOMAIN` – Which domain to run (`saas` | `hr` | `legal`)
 
 ```bash
-OPENAI_API_KEY=sk-... \
-HF_SPACE_URL=https://yokohamas-openenv-multidomain.hf.space \
-DOMAIN=saas \
-python baseline.py
+# Run locally against a live Docker container
+OPENAI_API_KEY=sk-... API_BASE_URL=https://api.openai.com/v1 MODEL_NAME=gpt-4o-mini \
+DOMAIN=saas python inference.py
+
+# Run against deployed Space
+OPENAI_API_KEY=sk-... HF_SPACE_URL=https://yokohamas-openenv-multidomain.hf.space \
+DOMAIN=saas python inference.py
 ```
+
+Expected output: task-by-task scores and average per domain.
+
+### Baseline Results Placeholder
+
+| Domain | Easy   | Medium | Hard   | Average |
+|--------|--------|--------|--------|---------|
+| `saas` | _TBD_  | _TBD_  | _TBD_  | _TBD_   |
+| `hr`   | _TBD_  | _TBD_  | _TBD_  | _TBD_   |
+| `legal`| _TBD_  | _TBD_  | _TBD_  | _TBD_   |
+
+*(Scores to be filled in after running `inference.py` on competition deployment)*
+
+**Grading method:** Each domain uses deterministic code graders + LLM graders (gpt-4o-mini). Terminal score = average of all grader scores, clamped to [0.0, 1.0].
+
+**Scoring criteria** (per domain):
+- **SaaS:** Ticket identification (20%), refund logic (20%), duplicate detection (20%), closure (20%), communication (20%)
+- **HR:** Policy lookup (20%), leave balance (20%), request accuracy (20%), notification (20%), documentation (20%)
+- **Legal:** Clause extraction (20%), risk assessment (20%), conflict detection (20%), memo docs (20%), recommendation quality (20%)
 
 ## Local Small-Model Benchmarking with Ollama
 
@@ -206,3 +231,4 @@ DOMAIN=saas openenv validate --verbose
 docker build -f server/Dockerfile -t multidomain-env .
 DOMAIN=saas docker run -p 7860:7860 multidomain-env
 ```
+

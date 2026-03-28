@@ -43,6 +43,7 @@ USER user
 
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONPATH=/app/env \
+    ENABLE_WEB_INTERFACE=true \
     DATABASE_URL=sqlite:////tmp/env.db
 
 WORKDIR /app

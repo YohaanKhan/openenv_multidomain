@@ -5,6 +5,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends git curl && \
     rm -rf /var/lib/apt/lists/*
 
+ARG BUILD_MODE=in-repo
 ARG ENV_NAME=openenv_multidomain
 
 COPY . /app/env
@@ -30,11 +31,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         uv sync --no-editable; \
     fi
 
-# Final runtime stage
 FROM python:3.11-slim
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends curl && \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/env/.venv /app/.venv

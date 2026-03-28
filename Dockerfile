@@ -1,6 +1,4 @@
-ARG BASE_IMAGE=ghcr.io/meta-pytorch/openenv-base:latest
-FROM ${BASE_IMAGE} AS builder
-USER root
+FROM python:3.11-slim AS builder
 WORKDIR /app
 
 RUN apt-get update && \
@@ -33,30 +31,26 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         uv sync --no-editable; \
     fi
 
-ARG BASE_IMAGE=ghcr.io/meta-pytorch/openenv-base:latest
-FROM ${BASE_IMAGE}
-USER root
+FROM python:3.11-slim
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*
 
-RUN if ! id -u user >/dev/null 2>&1; then \
-        useradd -m -u 1000 user; \
-    fi
+RUN useradd -m -u 1000 user
+RUN mkdir -p /app && chown -R user:user /app
 
 USER user
 
-ENV HOME=/home/user \
-    PATH=/home/user/app/.venv/bin:$PATH \
-    PYTHONPATH=/home/user/app/env \
+ENV PATH=/app/.venv/bin:$PATH \
+    PYTHONPATH=/app/env \
     DATABASE_URL=sqlite:////tmp/env.db
 
-WORKDIR $HOME/app
+WORKDIR /app
 
-COPY --from=builder --chown=user:user /app/env/.venv $HOME/app/.venv
-COPY --from=builder --chown=user:user /app/env $HOME/app/env
+COPY --from=builder --chown=user:user /app/env/.venv /app/.venv
+COPY --from=builder --chown=user:user /app/env /app/env
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=5 \
     CMD curl -f http://localhost:7860/health || exit 1
 
-CMD ["sh", "-c", "cd \"$HOME/app/env\" && uvicorn server.app:app --host 0.0.0.0 --port 7860 --workers 1"]
+CMD ["sh", "-c", "cd /app/env && uvicorn server.app:app --host 0.0.0.0 --port 7860 --workers 1"]

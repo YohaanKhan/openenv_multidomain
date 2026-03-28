@@ -31,14 +31,17 @@ For Hugging Face Spaces, the Docker image now follows the current Docker Spaces 
 - run as UID `1000`
 - copy files with the correct ownership
 - store the default SQLite runtime database at `/tmp/env.db`
+- use a repo-level `.dockerignore` so Docker does not send local artifacts, caches, tests, or SQLite files into the build context
 
 That avoids the startup/build-loop pattern where the Space boots successfully, then restarts because the default SQLite file is not writable at runtime.
 
 When deploying with `openenv push`, use the repository's `.hfignore` so local checkpoints, SQLite files, and benchmark artifacts are not uploaded to the Space:
 
 ```bash
-openenv push . --repo-id Yokohamas/openenv_multidomain --exclude .hfignore
+openenv push . --repo-id Yokohamas/openenv_multidomain_v2 --exclude .hfignore
 ```
+
+If you deploy by pushing the repository directly to a Docker Space, `.hfignore` is not enough by itself. The Docker builder uses `.dockerignore` to decide what enters the build context.
 
 ## Domains
 
@@ -138,7 +141,7 @@ OPENAI_API_KEY=sk-... API_BASE_URL=https://api.openai.com/v1 MODEL_NAME=gpt-4o-m
 DOMAIN=saas python inference.py
 
 # Run against deployed Space
-OPENAI_API_KEY=sk-... HF_SPACE_URL=https://yokohamas-openenv-multidomain.hf.space \
+OPENAI_API_KEY=sk-... HF_SPACE_URL=https://yokohamas-openenv-multidomain-v2.hf.space \
 DOMAIN=saas python inference.py
 ```
 
@@ -152,7 +155,7 @@ docker run -p 7860:7860 -e DOMAIN=saas multidomain-env &
 OPENAI_API_KEY=sk-... DOMAIN=saas python inference.py
 
 # Against deployed Space
-OPENAI_API_KEY=sk-... HF_SPACE_URL=https://yokohamas-openenv-multidomain.hf.space \
+OPENAI_API_KEY=sk-... HF_SPACE_URL=https://yokohamas-openenv-multidomain-v2.hf.space \
 DOMAIN=saas python inference.py
 
 # With OpenAI-compatible providers (e.g., OpenRouter)
@@ -204,7 +207,7 @@ pytest tests/unit/ -v
 - Model: `meta-llama/llama-3.1-70b-instruct` via OpenRouter
 - Temperature: 0.0 (deterministic)
 - Response Format: JSON
-- Deployment: HuggingFace Space (https://yokohamas-openenv-multidomain.hf.space)
+- Deployment: HuggingFace Space (https://yokohamas-openenv-multidomain-v2.hf.space)
 
 **Security Audit Results:**
 - ✅ All 79 unit tests pass

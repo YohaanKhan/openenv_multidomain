@@ -5,7 +5,6 @@ colorFrom: blue
 colorTo: indigo
 sdk: docker
 app_port: 7860
-dockerfile: server/Dockerfile
 pinned: false
 tags:
   - openenv

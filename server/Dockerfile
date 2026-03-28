@@ -32,19 +32,25 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     fi
 
 FROM python:3.11-slim
-WORKDIR /app
-
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/env/.venv /app/.venv
-COPY --from=builder /app/env /app/env
+RUN useradd -m -u 1000 user
 
-ENV PATH="/app/.venv/bin:$PATH"
-ENV PYTHONPATH="/app/env:$PYTHONPATH"
+USER user
+
+ENV HOME=/home/user \
+    PATH=/home/user/app/.venv/bin:$PATH \
+    PYTHONPATH=/home/user/app/env \
+    DATABASE_URL=sqlite:////tmp/env.db
+
+WORKDIR $HOME/app
+
+COPY --from=builder --chown=user:user /app/env/.venv $HOME/app/.venv
+COPY --from=builder --chown=user:user /app/env $HOME/app/env
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:7860/health || exit 1
 
-CMD ["sh", "-c", "cd /app/env && uvicorn server.app:app --host 0.0.0.0 --port 7860 --workers 1"]
+CMD ["sh", "-c", "cd \"$HOME/app/env\" && uvicorn server.app:app --host 0.0.0.0 --port 7860 --workers 1"]

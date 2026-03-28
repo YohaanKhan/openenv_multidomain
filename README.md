@@ -28,6 +28,13 @@ docker build -f server/Dockerfile -t multidomain-env .
 docker run -p 7860:7860 -e DOMAIN=saas multidomain-env
 ```
 
+For Hugging Face Spaces, the Docker image now follows the current Docker Spaces guidance:
+- run as UID `1000`
+- copy files with the correct ownership
+- store the default SQLite runtime database at `/tmp/env.db`
+
+That avoids the startup/build-loop pattern where the Space boots successfully, then restarts because the default SQLite file is not writable at runtime.
+
 ## Domains
 
 | Domain | Description | Tools | Tasks |
@@ -292,4 +299,3 @@ DOMAIN=saas openenv validate --verbose
 docker build -f server/Dockerfile -t multidomain-env .
 DOMAIN=saas docker run -p 7860:7860 multidomain-env
 ```
-

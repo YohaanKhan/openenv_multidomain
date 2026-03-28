@@ -162,7 +162,15 @@ DOMAIN=saas python inference.py
 # With OpenAI-compatible providers (e.g., OpenRouter)
 OPENAI_API_KEY=sk-or-v1-... API_BASE_URL=https://openrouter.ai/api/v1 \
 MODEL_NAME=meta-llama/llama-3.1-70b-instruct DOMAIN=saas python inference.py
+
+# With Groq (OpenAI-compatible API)
+OPENAI_API_KEY=gsk_... API_BASE_URL=https://api.groq.com/openai/v1 \
+MODEL_NAME=llama-3.1-8b-instant \
+HF_SPACE_URL=https://yokohamas-openenv-multidomain-v2.hf.space \
+DOMAIN=saas python inference.py
 ```
+
+**Groq note:** `llama-3.1-8b-instant` successfully completed the live `saas_easy` task against the deployed Space during verification. `openai/gpt-oss-20b` was less reliable with this script because it sometimes attempted tool-calling instead of returning the strict JSON object that `inference.py` expects, and longer Groq runs may hit rate limits depending on your account tier.
 
 ## Security & Fairness
 

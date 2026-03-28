@@ -5,6 +5,7 @@ colorFrom: blue
 colorTo: indigo
 sdk: docker
 app_port: 7860
+dockerfile: server/Dockerfile
 pinned: false
 tags:
   - openenv
@@ -180,11 +181,12 @@ pytest tests/unit/ -v
 
 #### Llama 3.1 70B via OpenRouter (OpenAI-compatible API)
 
+> [!NOTE]
+> The public Hugging Face Space is currently configured to the `saas` domain by default. To evaluate other domains (`hr`, `legal`), run the environment locally or redeploy the Space with the `DOMAIN` environment variable updated.
+
 | Domain | Easy   | Medium | Hard   | Average |
 |--------|--------|--------|--------|---------|
 | `saas` | 0.7500 | 0.7500 | 0.6750 | **0.7250** |
-| `hr`   | —      | —      | —      | —        |
-| `legal`| —      | —      | —      | —        |
 
 **Test Configuration:**
 - Model: `meta-llama/llama-3.1-70b-instruct` via OpenRouter

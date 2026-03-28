@@ -13,60 +13,90 @@ tags:
 
 # Multi-Domain LLM Evaluation Environment
 
-## Documentation: https://openenv-multidomain-docs.vercel.app/
+An OpenEnv environment for evaluating LLM agents on real-world professional workflows. The same container, API, and inference script can run multiple domains by switching one environment variable.
 
-A domain-pluggable OpenEnv environment for evaluating LLM agents on real-world professional workflows. Switch the active domain with one environment variable - same container, same API, same baseline script.
+## Links
 
-## Why This Exists
+- Docs: `https://openenv-multidomain-docs.vercel.app/`
+- Live Hugging Face Space: `https://huggingface.co/spaces/Yokohamas/openenv_multidomain_v2`
+- Live Web UI: `https://yokohamas-openenv-multidomain-v2.hf.space/web/`
+- Live API base URL: `https://yokohamas-openenv-multidomain-v2.hf.space`
 
-Most LLM evaluation focuses on knowledge retrieval or reasoning puzzles. Real-world agents need to orchestrate tools, track multi-step state, and handle ambiguous situations - the skills SaaS support agents, HR assistants, and legal reviewers use every day. This environment fills that gap.
+## What This Repo Covers
+
+- `saas`: customer support workflows like billing triage, refunds, and escalation
+- `hr`: leave management, payroll disputes, and policy workflows
+- `legal`: contract review, clause extraction, and risk flagging
+
+Each domain currently exposes 7 tools and 3 tasks.
 
 ## Quick Start
 
+### Local Docker
+
 ```bash
-docker build -f server/Dockerfile -t multidomain-env .
+docker build -t multidomain-env .
 docker run -p 7860:7860 -e DOMAIN=saas multidomain-env
 ```
 
-For Hugging Face Spaces, the Docker image now follows the current Docker Spaces guidance:
+Switch domains with `DOMAIN=hr` or `DOMAIN=legal`.
+
+### Local Validation
+
+```bash
+pip install openenv-core
+DOMAIN=saas openenv validate --verbose
+```
+
+### Deployed Space
+
+Open the live UI:
+
+```text
+https://yokohamas-openenv-multidomain-v2.hf.space/web/
+```
+
+Or use the API directly:
+
+```bash
+curl https://yokohamas-openenv-multidomain-v2.hf.space/health
+curl https://yokohamas-openenv-multidomain-v2.hf.space/tasks
+curl -X POST https://yokohamas-openenv-multidomain-v2.hf.space/reset \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+## Deployment Notes
+
+For Hugging Face Spaces, the Docker image is set up to:
+
 - run as UID `1000`
 - copy files with the correct ownership
-- store the default SQLite runtime database at `/tmp/env.db`
-- use a repo-level `.dockerignore` so Docker does not send local artifacts, caches, tests, or SQLite files into the build context
+- store the SQLite runtime database at `/tmp/env.db`
+- enable the browser UI at `/web`
+- use `.dockerignore` so local artifacts, caches, tests, and DB files do not enter the Docker build context
 
-That avoids the startup/build-loop pattern where the Space boots successfully, then restarts because the default SQLite file is not writable at runtime.
-
-When deploying with `openenv push`, use the repository's `.hfignore` so local checkpoints, SQLite files, and benchmark artifacts are not uploaded to the Space:
+When deploying with `openenv push`, use `.hfignore` so local artifacts are not uploaded:
 
 ```bash
 openenv push . --repo-id Yokohamas/openenv_multidomain_v2 --exclude .hfignore
 ```
 
-If you deploy by pushing the repository directly to a Docker Space, `.hfignore` is not enough by itself. The Docker builder uses `.dockerignore` to decide what enters the build context.
+If you deploy by pushing the repository directly to a Docker Space, `.hfignore` is not enough by itself. Docker uses `.dockerignore` for build context filtering.
 
-## Domains
+## Environment Contract
 
-| Domain | Description | Tools | Tasks |
-|--------|-------------|-------|-------|
-| `saas` | SaaS customer support - triage, refund, escalate | 7 | 3 |
-| `hr` | HR policy and leave management | 7 | 3 |
-| `legal` | Contract review and risk flagging | 7 | 3 |
-
-Switch with: `DOMAIN=hr docker run ...`
-
-## Action Space
-
-All domains use the same action type:
+### Action Format
 
 ```json
 {
   "tool_name": "search_tickets",
   "tool_args": {"query": "billing", "customer_id": "C-1042"},
-  "thought": "Agent's reasoning - logged but not executed"
+  "thought": "Reasoning is logged but not executed"
 }
 ```
 
-## Observation Space
+### Observation Format
 
 ```json
 {
@@ -82,24 +112,38 @@ All domains use the same action type:
 }
 ```
 
-`grader_score` is populated only on the terminal step (`done=true`).
+`grader_score` is only present on terminal observations.
 
-## API Endpoints
+### API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/reset` | POST | Start new episode |
-| `/step` | POST | Execute one action |
-| `/state` | GET | Current episode metadata |
-| `/tasks` | GET | List tasks + action schema |
-| `/baseline` | POST | Run baseline agent (`OPENAI_API_KEY` required) |
-| `/grader` | POST | Score a trajectory |
 | `/health` | GET | Health check |
+| `/tasks` | GET | Domain tasks and action schema |
+| `/reset` | POST | Start a new episode |
+| `/step` | POST | Execute one environment action |
+| `/state` | GET | Current episode metadata |
+| `/baseline` | POST | Run the built-in baseline agent |
+| `/grader` | POST | Score a trajectory |
 | `/metrics` | GET | Prometheus metrics |
+| `/web/metadata` | GET | Web UI metadata |
+| `/web/reset` | POST | Reset for the browser UI |
+| `/web/step` | POST | Step for the browser UI |
+| `/web/state` | GET | Browser UI state |
 
-## Tasks
+If you call the web endpoints manually, `/web/step` expects the payload shape `{"action": {...}}`.
 
-### SaaS Domain
+## Domains And Tasks
+
+### Domains
+
+| Domain | Description | Tools | Tasks |
+|--------|-------------|-------|-------|
+| `saas` | SaaS customer support triage, refunds, escalation | 7 | 3 |
+| `hr` | HR policy, leave management, payroll workflows | 7 | 3 |
+| `legal` | Contract review and risk flagging | 7 | 3 |
+
+### SaaS Tasks
 
 | Task | Difficulty | Objective | Max Steps |
 |------|-----------|-----------|-----------|
@@ -107,7 +151,7 @@ All domains use the same action type:
 | `saas_medium` | Medium | Double charge refund | 12 |
 | `saas_hard` | Hard | VIP multi-ticket triage | 20 |
 
-### HR Domain
+### HR Tasks
 
 | Task | Difficulty | Objective | Max Steps |
 |------|-----------|-----------|-----------|
@@ -115,7 +159,7 @@ All domains use the same action type:
 | `hr_medium` | Medium | File leave request | 12 |
 | `hr_hard` | Hard | Payroll dispute resolution | 18 |
 
-### Legal Domain
+### Legal Tasks
 
 | Task | Difficulty | Objective | Max Steps |
 |------|-----------|-----------|-----------|
@@ -123,124 +167,123 @@ All domains use the same action type:
 | `legal_medium` | Medium | Vendor contract payment terms | 12 |
 | `legal_hard` | Hard | SaaS agreement multi-party review | 20 |
 
-## Baseline Scores (`gpt-4o-mini`, temperature=0, `response_format="json_object"`)
+## Inference Guide
 
-Baseline scores are **deterministic** at temperature=0. All graders return scores in the range [0.0, 1.0].
-
-### Competition Baseline (`inference.py`)
+The competition/baseline runner is [inference.py](/Users/yohaankhan/Desktop/trialect/openenv_multidomain/inference.py). It drives the environment through the public API and prints task-by-task scores.
 
 Required environment variables:
-- `OPENAI_API_KEY` – Your OpenAI API key (or compatible provider key)
-- `API_BASE_URL` – LLM endpoint (default: `https://api.openai.com/v1`)
-- `MODEL_NAME` – Model identifier (default: `gpt-4o-mini`)
-- `HF_SPACE_URL` – Deployed Space URL (default: `http://localhost:7860`)
-- `DOMAIN` – Which domain to run (`saas` | `hr` | `legal`)
+
+- `OPENAI_API_KEY`: OpenAI or OpenAI-compatible API key
+- `API_BASE_URL`: LLM endpoint, default `https://api.openai.com/v1`
+- `MODEL_NAME`: model id, default `gpt-4o-mini`
+- `HF_SPACE_URL`: environment base URL, default `http://localhost:7860`
+- `DOMAIN`: `saas`, `hr`, or `legal`
+
+### Run Against Local Docker
 
 ```bash
-# Run locally against a live Docker container
-OPENAI_API_KEY=sk-... API_BASE_URL=https://api.openai.com/v1 MODEL_NAME=gpt-4o-mini \
-DOMAIN=saas python inference.py
+docker run -p 7860:7860 -e DOMAIN=saas multidomain-env &
+OPENAI_API_KEY=sk-... DOMAIN=saas python inference.py
+```
 
-# Run against deployed Space
-OPENAI_API_KEY=sk-... HF_SPACE_URL=https://yokohamas-openenv-multidomain-v2.hf.space \
+### Run Against The Live HF Space
+
+```bash
+OPENAI_API_KEY=sk-... \
+HF_SPACE_URL=https://yokohamas-openenv-multidomain-v2.hf.space \
 DOMAIN=saas python inference.py
 ```
 
-Expected output: task-by-task scores and average per domain.
+### OpenAI-Compatible Providers
 
-**How to run your own baseline:**
+OpenRouter example:
 
 ```bash
-# Against local Docker
-docker run -p 7860:7860 -e DOMAIN=saas multidomain-env &
-OPENAI_API_KEY=sk-... DOMAIN=saas python inference.py
-
-# Against deployed Space
-OPENAI_API_KEY=sk-... HF_SPACE_URL=https://yokohamas-openenv-multidomain-v2.hf.space \
-DOMAIN=saas python inference.py
-
-# With OpenAI-compatible providers (e.g., OpenRouter)
 OPENAI_API_KEY=sk-or-v1-... API_BASE_URL=https://openrouter.ai/api/v1 \
-MODEL_NAME=meta-llama/llama-3.1-70b-instruct DOMAIN=saas python inference.py
+MODEL_NAME=meta-llama/llama-3.1-70b-instruct \
+HF_SPACE_URL=https://yokohamas-openenv-multidomain-v2.hf.space \
+DOMAIN=saas python inference.py
+```
 
-# With Groq (OpenAI-compatible API)
+Groq example:
+
+```bash
 OPENAI_API_KEY=gsk_... API_BASE_URL=https://api.groq.com/openai/v1 \
 MODEL_NAME=llama-3.1-8b-instant \
 HF_SPACE_URL=https://yokohamas-openenv-multidomain-v2.hf.space \
 DOMAIN=saas python inference.py
 ```
 
-**Groq note:** `llama-3.1-8b-instant` successfully completed the live `saas_easy` task against the deployed Space during verification. `openai/gpt-oss-20b` was less reliable with this script because it sometimes attempted tool-calling instead of returning the strict JSON object that `inference.py` expects, and longer Groq runs may hit rate limits depending on your account tier.
+Groq note:
+- `llama-3.1-8b-instant` successfully completed the live `saas_easy` task during verification.
+- `openai/gpt-oss-20b` was less reliable with this script because it sometimes attempted tool-calling instead of returning the strict JSON object `inference.py` expects.
+- Longer Groq runs may hit `429` rate limits depending on account tier.
 
-## Security & Fairness
+## Evaluation And Results
 
-### Grader Audit
-
-All graders have been thoroughly tested for:
-- ✅ **Determinism**: Same trajectory always produces same score (no randomness, no clock/time dependencies)
-- ✅ **Bounds**: All scores clamped to [0.0, 1.0] before returning
-- ✅ **Isolation**: Work correctly with `session=None` (no hidden state leakage)
-- ✅ **Edge cases**: Tested on empty trajectories, partial trajectories, perfect trajectories, malformed inputs
-- ✅ **No Exploits**: Score manipulation via contrived actions is impossible
-
-### Comprehensive Test Coverage
-
-Run all tests:
-```bash
-pytest tests/unit/ -v
-```
-
-**Test Results:** 79 tests, all passing
-- 7 grader tests per domain (determinism, bounds, session isolation, edge cases)
-- 15+ tool tests per domain (correct/incorrect arguments, DB state transitions)
-- 5+ baseline integration tests
-
-### Known Limitations
-
-- Graders are heuristic-based (rule analysis, not semantic ML). Score distribution will differ from human raters.
-- LLM graders require live API calls (`/grader` with session; skipped if falsy)
-- Max 20 steps per task (agents hitting this limit are marked done but may have suboptimal scores)
-
-### Baseline Results
-
-#### Llama 3.1 70B via OpenRouter (OpenAI-compatible API)
+Baseline scores are deterministic at `temperature=0`. All grader outputs are clamped to `[0.0, 1.0]`.
 
 > [!NOTE]
-> The public Hugging Face Space is currently configured to the `saas` domain by default. To evaluate other domains (`hr`, `legal`), run the environment locally or redeploy the Space with the `DOMAIN` environment variable updated.
+> The public Hugging Face Space is currently configured to the `saas` domain by default. To evaluate `hr` or `legal`, run the environment locally or redeploy the Space with a different `DOMAIN`.
 
-| Domain | Easy   | Medium | Hard   | Average |
-|--------|--------|--------|--------|---------|
+### Public SaaS Baseline
+
+| Domain | Easy | Medium | Hard | Average |
+|--------|------|--------|------|---------|
 | `saas` | 0.7500 | 0.7500 | 0.6750 | **0.7250** |
 
-**Test Configuration:**
+Configuration:
+
 - Model: `meta-llama/llama-3.1-70b-instruct` via OpenRouter
-- Temperature: 0.0 (deterministic)
-- Response Format: JSON
-- Deployment: HuggingFace Space (https://yokohamas-openenv-multidomain-v2.hf.space)
+- Temperature: `0.0`
+- Response format: JSON
+- Deployment: `https://yokohamas-openenv-multidomain-v2.hf.space`
 
-**Security Audit Results:**
-- ✅ All 79 unit tests pass
-- ✅ Grader determinism verified (same trajectory → same score)
-- ✅ Score clamping validated (all scores in [0.0, 1.0])
-- ✅ No random/datetime dependencies (stateless)
-- ✅ DB isolation tested (session=None handling)
-- ✅ No exploitable edge cases detected
+Scoring rubric:
 
-**Grading Method:** Each domain uses deterministic code graders (trajectory analysis) + optional LLM graders for tone/quality. Terminal score = average of all grader scores, clamped to [0.0, 1.0].
+- SaaS: ticket identification, refund logic, duplicate detection, closure, communication
+- HR: policy lookup, leave balance, request accuracy, notification, documentation
+- Legal: clause extraction, risk assessment, conflict detection, memo quality, recommendation quality
 
-**Scoring Rubric** (per domain):
-- **SaaS:** Ticket identification (20%), refund logic (20%), duplicate detection (20%), closure (20%), communication (20%)
-- **HR:** Policy lookup (20%), leave balance (20%), request accuracy (20%), notification (20%), documentation (20%)
-- **Legal:** Clause extraction (20%), risk assessment (20%), conflict detection (20%), memo docs (20%), recommendation quality (20%)
+Known limitations:
 
-## Local Small-Model Benchmarking with Ollama
+- Graders are heuristic and rule-based, not semantic ML judges
+- LLM graders require live API access when used
+- Agents that hit max-step limits terminate with potentially suboptimal scores
 
-For local benchmarking and before-vs-after training comparisons, use the separate Ollama runner. This does not replace the competition baseline, but it is useful for showing how a smaller local model performs on the same SaaS tasks.
+## Tests And Reliability
+
+Current verification status:
+
+- 79 unit tests passing
+- 28 integration episode tests passing
+- live HF Space API verified
+- live `/web` UI verified
+
+Run tests locally:
+
+```bash
+PYTHONPATH=. ./../venv/bin/pytest tests/unit -q
+PYTHONPATH=. ./../venv/bin/pytest tests/integration/test_full_episodes.py -q
+```
+
+Grader audit coverage includes:
+
+- determinism
+- score bounds
+- session isolation
+- malformed and partial trajectories
+- exploit resistance checks
+
+## Local Small-Model Benchmarking
+
+Use the Ollama runner for local, lower-cost before/after benchmarking on the SaaS domain.
 
 Start the environment:
 
 ```bash
-DOMAIN=saas DATABASE_URL=sqlite:///./ollama_saas.db ./../venv/bin/python -m uvicorn server.app:app --port 7860
+DOMAIN=saas DATABASE_URL=sqlite:///./ollama_saas.db \
+./../venv/bin/python -m uvicorn server.app:app --port 7860
 ```
 
 Run one local model:
@@ -252,7 +295,7 @@ Run one local model:
   --output-json benchmark_results/codellama_saas.json
 ```
 
-Compare a base model and a trained variant:
+Compare a base model and a fine-tuned variant:
 
 ```bash
 ./../venv/bin/python benchmarks/run_saas_ollama.py \
@@ -263,6 +306,7 @@ Compare a base model and a trained variant:
 ```
 
 The Ollama runner reports:
+
 - per-task grader score
 - average score
 - success rate
@@ -275,9 +319,7 @@ Current local SaaS baseline (`qwen2.5:1.5b`, 10 repeated runs):
 |------|------|------|--------|------|----------------|-------------------|----------------|--------------------------|
 | `qwen2.5:1.5b` | 10 | 0.4250 | 0.4000 | 0.5000 | 0.4417 | 0.0000 | 12.6667 | 0.8158 |
 
-This baseline is intentionally weak but informative: the model often starts the correct support workflow, but still loops heavily and accumulates invalid tool calls, which makes it a useful "before training" checkpoint for the SaaS domain.
-
-For more credible benchmark evidence, run repeated evaluations and save all artifacts:
+For repeated evaluation with saved artifacts:
 
 ```bash
 ./../venv/bin/python benchmarks/run_saas_ollama.py \
@@ -289,30 +331,12 @@ For more credible benchmark evidence, run repeated evaluations and save all arti
   --output-json benchmark_results/codellama_vs_ft_summary.json
 ```
 
-This writes:
-- one JSON file per run for the primary model
-- one JSON file per run for the comparison model
-- a `summary.json` aggregate file with mean metrics and deltas
+## Extending The Environment
 
-Suggested reporting metrics:
-- mean average score
-- mean success rate
-- mean average turns
-- mean invalid action rate
-- task-level score means for `saas_easy`, `saas_medium`, and `saas_hard`
-
-## Adding a New Domain
+### Add A New Domain
 
 ```bash
 bash scripts/new_domain.sh finance
-# Fill in the 6 stub files - zero engine changes needed
 ```
 
-## Setup
-
-```bash
-pip install openenv-core
-DOMAIN=saas openenv validate --verbose
-docker build -f server/Dockerfile -t multidomain-env .
-DOMAIN=saas docker run -p 7860:7860 multidomain-env
-```
+Then fill in the generated domain files. The core environment engine does not need to change.

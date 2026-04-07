@@ -2,7 +2,8 @@ name: Sync to Hugging Face Hub
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -17,13 +18,18 @@ jobs:
           lfs: true
 
       - name: Install Git LFS
-        run: |
-          git lfs install
+        run: git lfs install
 
       - name: Push to Hugging Face Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          git remote add hf https://Yokohamas:$HF_TOKEN@huggingface.co/spaces/Yokohamas/openenv_multidomain_v2
-          git push hf main
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          git remote remove hf || true
+          git remote add hf https://Yokohamas:${HF_TOKEN}@huggingface.co/spaces/Yokohamas/openenv_multidomain_v2
+
+          git push --force hf main
           git lfs push hf main
+

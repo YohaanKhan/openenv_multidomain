@@ -30,6 +30,8 @@ HF_SPACE_URL = os.getenv("HF_SPACE_URL", "http://localhost:7860")
 DOMAIN = os.getenv("DOMAIN", "saas")
 ENV_RETRY_ATTEMPTS = int(os.getenv("ENV_RETRY_ATTEMPTS", "3"))
 ENV_RETRY_BACKOFF_S = float(os.getenv("ENV_RETRY_BACKOFF_S", "2"))
+MIN_SCORE = float(os.getenv("MIN_SCORE", "0.01"))
+MAX_SCORE = float(os.getenv("MAX_SCORE", "0.99"))
 
 
 # --------------------------------------------------------------------------- #
@@ -56,6 +58,13 @@ def _escape_structured_value(value: Any) -> str:
     """Render a single-line value for structured stdout."""
     text = str(value)
     return text.replace("\n", "\\n").replace("\r", "\\r")
+
+
+def _normalize_score(score: float) -> float:
+    """Clamp scores into the validator-required open interval (0, 1)."""
+    if MIN_SCORE >= MAX_SCORE:
+        raise ValueError("MIN_SCORE must be less than MAX_SCORE.")
+    return min(max(float(score), MIN_SCORE), MAX_SCORE)
 
 
 def _print_structured_start(task_id: str, env_name: str, model_name: str) -> None:
@@ -291,8 +300,8 @@ def run_episode(
         messages.append({"role": "assistant", "content": raw})
         messages.append({"role": "user", "content": observation.content})
 
-    grader_score = float(observation.info.get("grader_score") or 0.0)
-    success = done and grader_score > 0.0
+    grader_score = _normalize_score(float(observation.info.get("grader_score") or 0.0))
+    success = done and grader_score > MIN_SCORE
     return grader_score, turns, rewards, success
 
 
@@ -312,7 +321,7 @@ def run_all_tasks(domain_name: str) -> dict[str, float]:
         print(f"{'='*60}")
         _print_structured_start(task["id"], domain_name, MODEL_NAME)
 
-        score = 0.0
+        score = MIN_SCORE
         steps = 0
         rewards: list[float] = []
         success = False
@@ -337,7 +346,7 @@ def run_all_tasks(domain_name: str) -> dict[str, float]:
             finally:
                 env.close()
 
-        scores[task["id"]] = round(score, 4)
+        scores[task["id"]] = round(_normalize_score(score), 4)
         _print_structured_end(success, steps, scores[task["id"]], rewards)
         print(f"  => Final grader score: {scores[task['id']]:.4f}")
 

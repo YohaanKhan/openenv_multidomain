@@ -65,11 +65,41 @@ class RunEpisodeTests(unittest.TestCase):
             env, client, {"id": "saas_easy", "difficulty": "easy"}, "saas"
         )
 
-        self.assertEqual(score, 0.0)
+        self.assertEqual(score, 0.01)
         self.assertEqual(steps, 1)
         self.assertEqual(rewards, [])
         self.assertFalse(success)
         env.step.assert_not_called()
+
+    def test_normalizes_perfect_score_below_one(self) -> None:
+        initial = SimpleNamespace(
+            observation=SimpleNamespace(content="start", info={"task_id": "saas_easy", "grader_score": None}),
+            done=False,
+        )
+        terminal = SimpleNamespace(
+            observation=SimpleNamespace(content="done", info={"grader_score": 1.0}),
+            reward=1.0,
+            done=True,
+        )
+        env = SimpleNamespace(
+            reset=Mock(return_value=initial),
+            step=Mock(return_value=terminal),
+        )
+        text_response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content='{"tool_name":"done","tool_args":{},"thought":"finish"}'))]
+        )
+        client = SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=Mock(return_value=text_response)))
+        )
+
+        score, steps, rewards, success = run_episode(
+            env, client, {"id": "saas_easy", "difficulty": "easy"}, "saas"
+        )
+
+        self.assertEqual(score, 0.99)
+        self.assertEqual(steps, 1)
+        self.assertEqual(rewards, [1.0])
+        self.assertTrue(success)
 
 
 class RunAllTasksTests(unittest.TestCase):
@@ -96,7 +126,7 @@ class RunAllTasksTests(unittest.TestCase):
         ):
             scores = run_all_tasks("saas")
 
-        self.assertEqual(scores, {"saas_easy": 0.9, "saas_medium": 0.0})
+        self.assertEqual(scores, {"saas_easy": 0.9, "saas_medium": 0.01})
 
     def test_retries_task_after_environment_failure(self) -> None:
         fake_tasks = [{"id": "saas_easy", "difficulty": "easy"}]
@@ -152,6 +182,30 @@ class RunAllTasksTests(unittest.TestCase):
         self.assertEqual(scores, {"saas_easy": 0.75})
         self.assertIn("[START] task=saas_easy env=saas model=", output)
         self.assertIn("[END] success=true steps=2 score=0.75 rewards=0.25,0.50", output)
+
+    def test_normalizes_zero_score_in_structured_output(self) -> None:
+        fake_tasks = [{"id": "saas_easy", "difficulty": "easy"}]
+        fake_domain = SimpleNamespace(get_tasks=lambda: fake_tasks)
+
+        class FakeEnv:
+            def sync(self) -> "FakeEnv":
+                return self
+
+            def close(self) -> None:
+                return None
+
+        stdout = StringIO()
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}), patch(
+            "inference.OPENAI_API_KEY", "test-key"
+        ), patch("inference.OpenAI", return_value=object()), patch(
+            "inference.DomainRegistry.require", return_value=lambda: fake_domain
+        ), patch("inference.MultiDomainEnv", return_value=FakeEnv()), patch(
+            "inference.run_episode", return_value=(0.0, 0, [], False)
+        ), patch("sys.stdout", stdout):
+            scores = run_all_tasks("saas")
+
+        self.assertEqual(scores, {"saas_easy": 0.01})
+        self.assertIn("[END] success=false steps=0 score=0.01 rewards=", stdout.getvalue())
 
 
 if __name__ == "__main__":

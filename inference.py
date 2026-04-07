@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import sys
 from typing import Any
 
@@ -27,9 +28,8 @@ HF_TOKEN = os.getenv("HF_TOKEN", "")  # validated but not used in HTTP calls dir
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", HF_TOKEN)  # fall back to HF_TOKEN if set
 HF_SPACE_URL = os.getenv("HF_SPACE_URL", "http://localhost:7860")
 DOMAIN = os.getenv("DOMAIN", "saas")
-
-if not OPENAI_API_KEY:
-    sys.exit("ERROR: Set OPENAI_API_KEY (or HF_TOKEN) before running inference.py")
+ENV_RETRY_ATTEMPTS = int(os.getenv("ENV_RETRY_ATTEMPTS", "3"))
+ENV_RETRY_BACKOFF_S = float(os.getenv("ENV_RETRY_BACKOFF_S", "2"))
 
 
 # --------------------------------------------------------------------------- #
@@ -63,6 +63,37 @@ def _extract_text(response: Any) -> str:
         if parts:
             return "".join(parts)
     raise ValueError("OpenAI response contained no text content.")
+
+
+def _request_agent_action(client: OpenAI, messages: list[dict[str, Any]]) -> str:
+    """
+    Request the next JSON action from the model with a compatibility fallback.
+
+    Some OpenAI-compatible endpoints reject JSON mode even though the rest of the
+    chat completions API works. We retry once without `response_format` so the
+    script degrades gracefully instead of crashing the whole validation run.
+    """
+    request_kwargs = {
+        "model": MODEL_NAME,
+        "messages": messages,
+        "temperature": 0.0,
+        "max_tokens": 400,
+    }
+
+    try:
+        response = client.chat.completions.create(
+            response_format={"type": "json_object"},
+            **request_kwargs,
+        )
+        return _extract_text(response)
+    except Exception as exc:
+        print(
+            "  [llm] JSON-mode request failed; retrying without response_format. "
+            f"{type(exc).__name__}: {exc}"
+        )
+
+    response = client.chat.completions.create(**request_kwargs)
+    return _extract_text(response)
 
 
 def _reset_for_task(env: Any, task_id: str, total_tasks: int) -> Any:
@@ -146,15 +177,14 @@ def run_episode(
     while not done and turns < max_turns:
         turns += 1
 
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=messages,
-            response_format={"type": "json_object"},
-            temperature=0.0,
-            max_tokens=400,
-        )
-
-        raw = _extract_text(response)
+        try:
+            raw = _request_agent_action(client, messages)
+        except Exception as exc:
+            print(
+                f"  [turn {turns}] LLM request failed; ending task early. "
+                f"{type(exc).__name__}: {exc}"
+            )
+            break
 
         try:
             action_dict = json.loads(raw)
@@ -185,7 +215,14 @@ def run_episode(
         last_tool_call = current_call
 
         action = EnvAction(tool_name=tool_name, tool_args=tool_args, thought=thought)
-        step_result = env.step(action)
+        try:
+            step_result = env.step(action)
+        except Exception as exc:
+            print(
+                f"  [turn {turns}] Environment step failed; ending task early. "
+                f"{type(exc).__name__}: {exc}"
+            )
+            break
         observation = step_result.observation
         done = step_result.done
 
@@ -200,23 +237,43 @@ def run_episode(
 
 def run_all_tasks(domain_name: str) -> dict[str, float]:
     """Run one episode per task in the domain. Returns {task_id: score}."""
+    if not OPENAI_API_KEY:
+        raise EnvironmentError("Set OPENAI_API_KEY (or HF_TOKEN) before running inference.py")
+
     client = OpenAI(api_key=OPENAI_API_KEY, base_url=API_BASE_URL)
     domain = DomainRegistry.require(domain_name)()
     tasks = domain.get_tasks()
 
     scores: dict[str, float] = {}
+    for task in tasks:
+        print(f"\n{'='*60}")
+        print(f"Domain: {domain_name} | Task: {task['id']} ({task.get('difficulty','?')})")
+        print(f"{'='*60}")
 
-    env = MultiDomainEnv(base_url=HF_SPACE_URL).sync()
-    try:
-        for task in tasks:
-            print(f"\n{'='*60}")
-            print(f"Domain: {domain_name} | Task: {task['id']} ({task.get('difficulty','?')})")
-            print(f"{'='*60}")
-            score = run_episode(env, client, task, domain_name)
-            scores[task["id"]] = round(score, 4)
-            print(f"  => Final grader score: {scores[task['id']]:.4f}")
-    finally:
-        env.close()
+        score = 0.0
+        for attempt in range(1, ENV_RETRY_ATTEMPTS + 1):
+            env = MultiDomainEnv(base_url=HF_SPACE_URL).sync()
+            try:
+                if attempt > 1:
+                    print(f"  [env] retry attempt {attempt}/{ENV_RETRY_ATTEMPTS}")
+                score = run_episode(env, client, task, domain_name)
+                break
+            except Exception as exc:
+                print(
+                    f"  [env] task attempt {attempt} failed. "
+                    f"{type(exc).__name__}: {exc}"
+                )
+                if attempt == ENV_RETRY_ATTEMPTS:
+                    print("  => Exhausted environment retries; recording 0.0.")
+                else:
+                    sleep_s = ENV_RETRY_BACKOFF_S * attempt
+                    print(f"  [env] waiting {sleep_s:.1f}s before reconnecting...")
+                    time.sleep(sleep_s)
+            finally:
+                env.close()
+
+        scores[task["id"]] = round(score, 4)
+        print(f"  => Final grader score: {scores[task['id']]:.4f}")
 
     return scores
 
@@ -235,7 +292,10 @@ def print_results(domain_name: str, scores: dict[str, float]) -> None:
 
 def main() -> None:
     """Main entry point."""
-    scores = run_all_tasks(DOMAIN)
+    try:
+        scores = run_all_tasks(DOMAIN)
+    except EnvironmentError as exc:
+        sys.exit(f"ERROR: {exc}")
     print_results(DOMAIN, scores)
 
 

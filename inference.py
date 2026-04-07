@@ -52,19 +52,51 @@ except ImportError:
 # --------------------------------------------------------------------------- #
 
 
-def _print_structured_start(task_id: str) -> None:
+def _escape_structured_value(value: Any) -> str:
+    """Render a single-line value for structured stdout."""
+    text = str(value)
+    return text.replace("\n", "\\n").replace("\r", "\\r")
+
+
+def _print_structured_start(task_id: str, env_name: str, model_name: str) -> None:
     """Emit validator-friendly task start output."""
-    print(f"[START] task={task_id}", flush=True)
+    print(
+        f"[START] task={_escape_structured_value(task_id)} "
+        f"env={_escape_structured_value(env_name)} "
+        f"model={_escape_structured_value(model_name)}",
+        flush=True,
+    )
 
 
-def _print_structured_step(step: int, reward: float, done: bool) -> None:
+def _print_structured_step(
+    step: int,
+    action: str,
+    reward: float,
+    done: bool,
+    error: str | None,
+) -> None:
     """Emit validator-friendly per-step output."""
-    print(f"[STEP] step={step} reward={reward:.4f} done={str(done).lower()}", flush=True)
+    error_value = _escape_structured_value(error) if error else "null"
+    print(
+        f"[STEP] step={step} "
+        f"action={_escape_structured_value(action)} "
+        f"reward={reward:.2f} "
+        f"done={str(done).lower()} "
+        f"error={error_value}",
+        flush=True,
+    )
 
 
-def _print_structured_end(task_id: str, score: float, steps: int) -> None:
+def _print_structured_end(success: bool, steps: int, score: float, rewards: list[float]) -> None:
     """Emit validator-friendly task completion output."""
-    print(f"[END] task={task_id} score={score:.4f} steps={steps}", flush=True)
+    rewards_str = ",".join(f"{reward:.2f}" for reward in rewards)
+    print(
+        f"[END] success={str(success).lower()} "
+        f"steps={steps} "
+        f"score={score:.2f} "
+        f"rewards={rewards_str}",
+        flush=True,
+    )
 
 
 def _extract_text(response: Any) -> str:
@@ -170,8 +202,8 @@ def run_episode(
     task: dict,
     domain_name: str,
     max_turns: int = 30,
-) -> tuple[float, int]:
-    """Run one episode for a single task. Returns (terminal grader score, steps used)."""
+) -> tuple[float, int, list[float], bool]:
+    """Run one episode for a single task. Returns score, steps, rewards, success."""
     task_id = task["id"]
     total_tasks = int(os.getenv("DOMAIN_TASK_COUNT", "3"))
 
@@ -188,6 +220,7 @@ def run_episode(
     turns = 0
     last_tool_call = None
     consecutive_repeats = 0
+    rewards: list[float] = []
 
     while not done and turns < max_turns:
         turns += 1
@@ -217,6 +250,14 @@ def run_episode(
         tool_name = action_dict.get("tool_name", "")
         tool_args = action_dict.get("tool_args", {})
         thought = action_dict.get("thought", "")
+        action_str = json.dumps(
+            {
+                "tool_name": tool_name,
+                "tool_args": tool_args,
+                "thought": thought,
+            },
+            sort_keys=True,
+        )
 
         # Detect infinite loop / repeated identical calls
         current_call = (tool_name, json.dumps(tool_args, sort_keys=True))
@@ -237,18 +278,22 @@ def run_episode(
                 f"  [turn {turns}] Environment step failed; ending task early. "
                 f"{type(exc).__name__}: {exc}"
             )
+            _print_structured_step(turns, action_str, 0.0, False, str(exc))
             break
         observation = step_result.observation
         done = step_result.done
+        reward = float(step_result.reward or 0.0)
+        rewards.append(reward)
 
-        print(f"  [turn {turns}] tool={tool_name} | reward={step_result.reward:.4f} | done={done}")
-        _print_structured_step(turns, float(step_result.reward or 0.0), bool(done))
+        print(f"  [turn {turns}] tool={tool_name} | reward={reward:.4f} | done={done}")
+        _print_structured_step(turns, action_str, reward, bool(done), None)
 
         messages.append({"role": "assistant", "content": raw})
         messages.append({"role": "user", "content": observation.content})
 
     grader_score = float(observation.info.get("grader_score") or 0.0)
-    return grader_score, turns
+    success = done and grader_score > 0.0
+    return grader_score, turns, rewards, success
 
 
 def run_all_tasks(domain_name: str) -> dict[str, float]:
@@ -265,16 +310,18 @@ def run_all_tasks(domain_name: str) -> dict[str, float]:
         print(f"\n{'='*60}")
         print(f"Domain: {domain_name} | Task: {task['id']} ({task.get('difficulty','?')})")
         print(f"{'='*60}")
-        _print_structured_start(task["id"])
+        _print_structured_start(task["id"], domain_name, MODEL_NAME)
 
         score = 0.0
         steps = 0
+        rewards: list[float] = []
+        success = False
         for attempt in range(1, ENV_RETRY_ATTEMPTS + 1):
             env = MultiDomainEnv(base_url=HF_SPACE_URL).sync()
             try:
                 if attempt > 1:
                     print(f"  [env] retry attempt {attempt}/{ENV_RETRY_ATTEMPTS}")
-                score, steps = run_episode(env, client, task, domain_name)
+                score, steps, rewards, success = run_episode(env, client, task, domain_name)
                 break
             except Exception as exc:
                 print(
@@ -291,7 +338,7 @@ def run_all_tasks(domain_name: str) -> dict[str, float]:
                 env.close()
 
         scores[task["id"]] = round(score, 4)
-        _print_structured_end(task["id"], scores[task["id"]], steps)
+        _print_structured_end(success, steps, scores[task["id"]], rewards)
         print(f"  => Final grader score: {scores[task['id']]:.4f}")
 
     return scores

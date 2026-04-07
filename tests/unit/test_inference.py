@@ -33,13 +33,21 @@ class RunEpisodeTests(unittest.TestCase):
 
         stdout = StringIO()
         with patch("sys.stdout", stdout):
-            score, steps = run_episode(env, client, {"id": "saas_easy", "difficulty": "easy"}, "saas")
+            score, steps, rewards, success = run_episode(
+                env, client, {"id": "saas_easy", "difficulty": "easy"}, "saas"
+            )
 
         self.assertEqual(score, 0.8)
         self.assertEqual(steps, 1)
+        self.assertEqual(rewards, [0.8])
+        self.assertTrue(success)
         self.assertEqual(create.call_count, 2)
         self.assertEqual(env.step.call_count, 1)
-        self.assertIn("[STEP] step=1 reward=0.8000 done=true", stdout.getvalue())
+        self.assertIn("[STEP] step=1", stdout.getvalue())
+        self.assertIn("reward=0.80", stdout.getvalue())
+        self.assertIn("done=true", stdout.getvalue())
+        self.assertIn("error=null", stdout.getvalue())
+        self.assertIn('"tool_name": "done"', stdout.getvalue())
 
     def test_returns_zero_when_llm_request_keeps_failing(self) -> None:
         initial = SimpleNamespace(
@@ -53,10 +61,14 @@ class RunEpisodeTests(unittest.TestCase):
         create = Mock(side_effect=RuntimeError("network down"))
         client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
 
-        score, steps = run_episode(env, client, {"id": "saas_easy", "difficulty": "easy"}, "saas")
+        score, steps, rewards, success = run_episode(
+            env, client, {"id": "saas_easy", "difficulty": "easy"}, "saas"
+        )
 
         self.assertEqual(score, 0.0)
         self.assertEqual(steps, 1)
+        self.assertEqual(rewards, [])
+        self.assertFalse(success)
         env.step.assert_not_called()
 
 
@@ -80,7 +92,7 @@ class RunAllTasksTests(unittest.TestCase):
         ), patch("inference.OpenAI", return_value=object()), patch(
             "inference.DomainRegistry.require", return_value=lambda: fake_domain
         ), patch("inference.MultiDomainEnv", return_value=FakeEnv()), patch(
-            "inference.run_episode", side_effect=[(0.9, 2), RuntimeError("boom")]
+            "inference.run_episode", side_effect=[(0.9, 2, [0.4, 0.5], True), RuntimeError("boom")]
         ):
             scores = run_all_tasks("saas")
 
@@ -108,7 +120,7 @@ class RunAllTasksTests(unittest.TestCase):
         ), patch(
             "inference.MultiDomainEnv", return_value=FakeEnv()
         ), patch(
-            "inference.run_episode", side_effect=[RuntimeError("ws closed"), (0.6, 3)]
+            "inference.run_episode", side_effect=[RuntimeError("ws closed"), (0.6, 3, [0.2, 0.2, 0.2], True)]
         ) as run_episode:
             scores = run_all_tasks("saas")
 
@@ -132,14 +144,14 @@ class RunAllTasksTests(unittest.TestCase):
         ), patch("inference.OpenAI", return_value=object()), patch(
             "inference.DomainRegistry.require", return_value=lambda: fake_domain
         ), patch("inference.MultiDomainEnv", return_value=FakeEnv()), patch(
-            "inference.run_episode", return_value=(0.75, 2)
+            "inference.run_episode", return_value=(0.75, 2, [0.25, 0.5], True)
         ), patch("sys.stdout", stdout):
             scores = run_all_tasks("saas")
 
         output = stdout.getvalue()
         self.assertEqual(scores, {"saas_easy": 0.75})
-        self.assertIn("[START] task=saas_easy", output)
-        self.assertIn("[END] task=saas_easy score=0.7500 steps=2", output)
+        self.assertIn("[START] task=saas_easy env=saas model=", output)
+        self.assertIn("[END] success=true steps=2 score=0.75 rewards=0.25,0.50", output)
 
 
 if __name__ == "__main__":

@@ -52,6 +52,21 @@ except ImportError:
 # --------------------------------------------------------------------------- #
 
 
+def _print_structured_start(task_id: str) -> None:
+    """Emit validator-friendly task start output."""
+    print(f"[START] task={task_id}", flush=True)
+
+
+def _print_structured_step(step: int, reward: float, done: bool) -> None:
+    """Emit validator-friendly per-step output."""
+    print(f"[STEP] step={step} reward={reward:.4f} done={str(done).lower()}", flush=True)
+
+
+def _print_structured_end(task_id: str, score: float, steps: int) -> None:
+    """Emit validator-friendly task completion output."""
+    print(f"[END] task={task_id} score={score:.4f} steps={steps}", flush=True)
+
+
 def _extract_text(response: Any) -> str:
     """Extract text content from OpenAI Chat Completions response."""
     choice = response.choices[0].message
@@ -155,8 +170,8 @@ def run_episode(
     task: dict,
     domain_name: str,
     max_turns: int = 30,
-) -> float:
-    """Run one episode for a single task. Returns the terminal grader score."""
+) -> tuple[float, int]:
+    """Run one episode for a single task. Returns (terminal grader score, steps used)."""
     task_id = task["id"]
     total_tasks = int(os.getenv("DOMAIN_TASK_COUNT", "3"))
 
@@ -227,12 +242,13 @@ def run_episode(
         done = step_result.done
 
         print(f"  [turn {turns}] tool={tool_name} | reward={step_result.reward:.4f} | done={done}")
+        _print_structured_step(turns, float(step_result.reward or 0.0), bool(done))
 
         messages.append({"role": "assistant", "content": raw})
         messages.append({"role": "user", "content": observation.content})
 
     grader_score = float(observation.info.get("grader_score") or 0.0)
-    return grader_score
+    return grader_score, turns
 
 
 def run_all_tasks(domain_name: str) -> dict[str, float]:
@@ -249,14 +265,16 @@ def run_all_tasks(domain_name: str) -> dict[str, float]:
         print(f"\n{'='*60}")
         print(f"Domain: {domain_name} | Task: {task['id']} ({task.get('difficulty','?')})")
         print(f"{'='*60}")
+        _print_structured_start(task["id"])
 
         score = 0.0
+        steps = 0
         for attempt in range(1, ENV_RETRY_ATTEMPTS + 1):
             env = MultiDomainEnv(base_url=HF_SPACE_URL).sync()
             try:
                 if attempt > 1:
                     print(f"  [env] retry attempt {attempt}/{ENV_RETRY_ATTEMPTS}")
-                score = run_episode(env, client, task, domain_name)
+                score, steps = run_episode(env, client, task, domain_name)
                 break
             except Exception as exc:
                 print(
@@ -273,6 +291,7 @@ def run_all_tasks(domain_name: str) -> dict[str, float]:
                 env.close()
 
         scores[task["id"]] = round(score, 4)
+        _print_structured_end(task["id"], scores[task["id"]], steps)
         print(f"  => Final grader score: {scores[task['id']]:.4f}")
 
     return scores
